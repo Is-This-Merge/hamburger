@@ -98,6 +98,10 @@
     let onionUnlocked = false;
     let cheeseUnlocked = false;
     let screenshotClickCount = 0;
+    let fallingItem = null;
+    let isFalling = false;
+    let vegetarianUnlocked = false;
+    let breadGirlUnlocked = false;
 
     let easterEgg = false;
     let gameLoop = null;
@@ -130,8 +134,8 @@
         return;
       }
 
-      burgerList.push(type);
-      drawBurger();
+      if (isFalling) return;
+      startFalling(type);
       clearMessage();
     }
 
@@ -149,8 +153,56 @@
       }
 
       hasFlag = !hasFlag;
-      drawBurger();
+
       clearMessage();
+      checkBreadGirlEasterEgg();
+      checkVegetarianEasterEgg();
+
+      drawBurger();
+    }
+
+    function checkBreadGirlEasterEgg() {
+      if (breadGirlUnlocked) return;
+
+      const breadCount = burgerList.filter(item => item === 'bottomBread' || item === 'topBread').length;
+      const onlyBread = burgerList.length > 0 && burgerList.every(item => item === 'bottomBread' || item === 'topBread');
+
+      if (onlyBread && breadCount >= 4 && hasFlag && isCompleteBurger()) {
+        breadGirlUnlocked = true;
+        showMessage('빵순이');
+      }
+    }
+
+    function checkVegetarianEasterEgg() {
+      if (vegetarianUnlocked) return;
+
+      const hasPatty = burgerList.includes('patty');
+
+      if (!hasPatty && hasFlag && isCompleteBurger() && !breadGirlUnlocked) {
+        vegetarianUnlocked = true;
+        showMessage('채식주의자');
+
+        ctx.save();
+        ctx.fillStyle = 'rgba(80, 180, 80, 0.18)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        for (let i = 0; i < 18; i++) {
+          ctx.fillStyle = '#4caf50';
+          ctx.beginPath();
+          ctx.ellipse(
+            Math.random() * canvas.width,
+            Math.random() * canvas.height,
+            12,
+            6,
+            Math.random() * Math.PI,
+            0,
+            Math.PI * 2
+          );
+          ctx.fill();
+        }
+
+        ctx.restore();
+      }
     }
 
     function clearBurger() {
@@ -206,6 +258,71 @@
       link.click();
     }
 
+    function startFalling(type) {
+      isFalling = true;
+
+      const targetY = getTargetY(type);
+      fallingItem = {
+        type: type,
+        y: -80,
+        targetY: targetY,
+        speed: 0
+      };
+
+      requestAnimationFrame(animateFalling);
+    }
+
+    function animateFalling() {
+      if (!fallingItem) return;
+
+      fallingItem.speed += 1.2;
+      fallingItem.y += fallingItem.speed;
+
+      if (fallingItem.y >= fallingItem.targetY) {
+        burgerList.push(fallingItem.type);
+        fallingItem = null;
+        isFalling = false;
+        drawBurger();
+        return;
+      }
+
+      drawBurger();
+      requestAnimationFrame(animateFalling);
+    }
+
+    function getTargetY(type) {
+      let y = 570;
+
+      for (const item of burgerList) {
+        y -= getHeight(item);
+      }
+
+      return y - getHeight(type);
+    }
+
+    function getHeight(type) {
+      if (type === 'bottomBread') return 32;
+      if (type === 'topBread') return 56;
+      if (type === 'patty') return 34;
+      if (type === 'cheese') return 19;
+      if (type === 'lettuce') return 25;
+      if (type === 'cabbage') return 22;
+      if (type === 'onion') return 14;
+      if (type === 'tomato') return 34;
+      return 30;
+    }
+
+    function drawSingleIngredient(type, x, y) {
+      if (type === 'bottomBread') drawBottomBread(x, y);
+      if (type === 'topBread') drawTopBread(x, y);
+      if (type === 'patty') drawPatty(x, y);
+      if (type === 'cheese') drawCheese(x, y);
+      if (type === 'lettuce') drawLettuce(x, y);
+      if (type === 'cabbage') drawCabbage(x, y);
+      if (type === 'onion') drawOnion(x, y);
+      if (type === 'tomato') drawTomato(x, y);
+    }
+
     function drawBurger() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       ctx.fillStyle = '#fff3d6';
@@ -234,6 +351,10 @@
       if (hasFlag && burgerList.length > 0) {
         drawFlagBehindBurger(x, topY + 55);
         redrawIngredientsOnly(x, startY);
+      }
+
+      if (fallingItem) {
+        drawSingleIngredient(fallingItem.type, x, fallingItem.y);
       }
     }
 
