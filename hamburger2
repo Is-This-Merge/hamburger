@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <title>햄버거 쌓기</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      font-family: sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #fff3d6;
+    }
+
+    .game {
+      display: grid;
+      grid-template-columns: 500px 190px;
+      column-gap: 80px;
+      align-items: center;
+    }
+
+    canvas {
+      background: #fff3d6;
+    }
+
+    .buttons {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    button, input {
+      width: 170px;
+      height: 52px;
+      border-radius: 14px;
+      font-size: 18px;
+      font-weight: bold;
+      box-sizing: border-box;
+    }
+
+    button {
+      border: none;
+      cursor: pointer;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.22);
+    }
+
+    button:hover {
+      transform: scale(1.04);
+    }
+
+    input {
+      border: 3px solid #d9a441;
+      padding: 0 12px;
+      background: white;
+    }
+
+    #message {
+      height: 30px;
+      text-align: center;
+      font-weight: bold;
+      font-size: 20px;
+      margin-top: 8px;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <div class="game">
+    <div>
+      <canvas id="burgerCanvas" width="500" height="650"></canvas>
+      <div id="message"></div>
+    </div>
+
+    <div class="buttons">
+      <input id="fileName" placeholder="파일 이름">
+      <button style="background: #d97b00; color: white;" onclick="add('bottomBread')">아래빵</button>
+      <button style="background: orange; color: white;" onclick="add('topBread')">윗빵</button>
+      <button style="background: brown; color: white;" onclick="add('patty')">패티</button>
+      <button id="cheeseButton" style="background: #555; color: white;" onclick="add('cheese')">???</button>
+      <button style="background: green; color: white;" onclick="add('lettuce')">양상추</button>
+      <button style="background: #7fbf3f; color: white;" onclick="add('cabbage')">양배추</button>
+      <button id="onionButton" style="background: #555; color: white;" onclick="add('onion')">???</button>
+      <button style="background: red; color: white;" onclick="add('tomato')">토마토</button>
+      <button style="background: #ef233c; color: white;" onclick="toggleFlag()">깃발</button>
+      <button style="background: #2563eb; color: white;" onclick="saveBurger()">스크린샷</button>
+      <button style="background: #444; color: white;" onclick="clearBurger()">초기화</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('burgerCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let burgerList = [];
+    let hasFlag = false;
+    let onionUnlocked = false;
+    let cheeseUnlocked = false;
+    let screenshotClickCount = 0;
+
+    let easterEgg = false;
+    let gameLoop = null;
+    let ballX = 70;
+    let ballY = 565;
+    let ballVX = 0;
+    let ballVY = 0;
+    let keys = {};
+
+    const stars = Array.from({ length: 60 }, () => ({
+      x: Math.random() * 500,
+      y: Math.random() * 650
+    }));
+
+    const bigStars = Array.from({ length: 10 }, () => ({
+      x: Math.random() * 500,
+      y: Math.random() * 650,
+      size: 3 + Math.random() * 4
+    }));
+
+    function add(type) {
+      if (easterEgg) return;
+
+      if (type === 'onion' && !onionUnlocked) return;
+
+      if (type === 'cheese' && !cheeseUnlocked) return;
+
+      if (hasFlag) {
+        showMessage('깃발을 꽂은 뒤에는 재료를 추가할 수 없습니다.');
+        return;
+      }
+
+      burgerList.push(type);
+      drawBurger();
+      clearMessage();
+    }
+
+    function toggleFlag() {
+      if (burgerList.length === 0) {
+        if (!onionUnlocked) {
+          startEasterEgg();
+        }
+        return;
+      }
+
+      if (!isCompleteBurger()) {
+        showMessage('맨 위가 윗빵이어야 햄버거가 완성됩니다.');
+        return;
+      }
+
+      hasFlag = !hasFlag;
+      drawBurger();
+      clearMessage();
+    }
+
+    function clearBurger() {
+      exitEasterEgg();
+      burgerList = [];
+      hasFlag = false;
+      drawBurger();
+      clearMessage();
+    }
+
+    function isCompleteBurger() {
+      return burgerList.length > 0 && burgerList[burgerList.length - 1] === 'topBread';
+    }
+
+    function showMessage(text) {
+      document.getElementById('message').textContent = text;
+    }
+
+    function clearMessage() {
+      document.getElementById('message').textContent = '';
+    }
+
+    function saveBurger() {
+      if (easterEgg) return;
+
+      if (burgerList.length === 0) {
+        if (!cheeseUnlocked) {
+          screenshotClickCount++;
+
+          if (screenshotClickCount >= 5) {
+            cheeseUnlocked = true;
+            document.getElementById('cheeseButton').style.background = 'gold';
+            document.getElementById('cheeseButton').style.color = 'black';
+            document.getElementById('cheeseButton').textContent = '치즈';
+            showMessage('치즈가 해금되었습니다!');
+          }
+        }
+        return;
+      }
+
+      if (!isCompleteBurger()) {
+        showMessage('맨 위가 윗빵이어야 햄버거가 완성됩니다.');
+        return;
+      }
+
+      let name = document.getElementById('fileName').value.trim();
+      if (name === '') name = 'hamburger';
+      name = name.replace(/[\\/:*?"<>|]/g, '_');
+
+      const link = document.createElement('a');
+      link.download = name + '.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    }
+
+    function drawBurger() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#fff3d6';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const x = 250;
+      const startY = 570;
+      let y = startY;
+      let topY = y;
+
+      drawPlate(x, 590);
+
+      for (let i = 0; i < burgerList.length; i++) {
+        const type = burgerList[i];
+        if (type === 'bottomBread') { drawBottomBread(x, y - 34); y -= 32; }
+        if (type === 'topBread') { drawTopBread(x, y - 58); y -= 56; }
+        if (type === 'patty') { drawPatty(x, y - 36); y -= 34; }
+        if (type === 'cheese') { drawCheese(x, y - 21); y -= 19; }
+        if (type === 'lettuce') { drawLettuce(x, y - 27); y -= 25; }
+        if (type === 'cabbage') { drawCabbage(x, y - 24); y -= 22; }
+        if (type === 'onion') { drawOnion(x, y - 20); y -= 14; }
+        if (type === 'tomato') { drawTomato(x, y - 36); y -= 34; }
+        topY = y;
+      }
+
+      if (hasFlag && burgerList.length > 0) {
+        drawFlagBehindBurger(x, topY + 55);
+        redrawIngredientsOnly(x, startY);
+      }
+    }
+
+    function redrawIngredientsOnly(x, startY) {
+      let y = startY;
+      for (let i = 0; i < burgerList.length; i++) {
+        const type = burgerList[i];
+        if (type === 'bottomBread') { drawBottomBread(x, y - 34); y -= 32; }
+        if (type === 'topBread') { drawTopBread(x, y - 58); y -= 56; }
+        if (type === 'patty') { drawPatty(x, y - 36); y -= 34; }
+        if (type === 'cheese') { drawCheese(x, y - 21); y -= 19; }
+        if (type === 'lettuce') { drawLettuce(x, y - 27); y -= 25; }
+        if (type === 'cabbage') { drawCabbage(x, y - 24); y -= 22; }
+        if (type === 'onion') { drawOnion(x, y - 20); y -= 14; }
+        if (type === 'tomato') { drawTomato(x, y - 36); y -= 34; }
+      }
+    }
+
+    function drawRound(x, y, w, h, r, color) {
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.roundRect(x, y, w, h, r);
+      ctx.fill();
+
+      ctx.fillStyle = 'rgba(0,0,0,0.08)';
+      ctx.beginPath();
+      ctx.roundRect(x, y + h - 4, w, 4, r);
+      ctx.fill();
+    }
+
+    function drawPlate(x, y) {
+      ctx.fillStyle = '#e9ecef';
+      ctx.beginPath();
+      ctx.ellipse(x, y, 155, 28, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ced4da';
+      ctx.beginPath();
+      ctx.ellipse(x, y + 2, 105, 13, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawBottomBread(x, y) {
+      ctx.fillStyle = '#c98a42';
+      ctx.beginPath();
+      ctx.roundRect(x - 105, y, 210, 38, 20);
+      ctx.fill();
+
+      ctx.fillStyle = '#ddb06a';
+      ctx.beginPath();
+      ctx.roundRect(x - 98, y + 5, 196, 10, 12);
+      ctx.fill();
+    }
+
+    function drawTopBread(x, y) {
+      ctx.fillStyle = '#c98a42';
+      ctx.beginPath();
+      ctx.moveTo(x - 105, y + 58);
+      ctx.quadraticCurveTo(x - 90, y - 8, x, y - 10);
+      ctx.quadraticCurveTo(x + 90, y - 8, x + 105, y + 58);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#ddb06a';
+      ctx.beginPath();
+      ctx.moveTo(x - 82, y + 42);
+      ctx.quadraticCurveTo(x - 65, y + 4, x, y + 2);
+      ctx.quadraticCurveTo(x + 65, y + 4, x + 82, y + 42);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#fff2c7';
+      drawSesame(x - 58, y + 18);
+      drawSesame(x - 18, y + 8);
+      drawSesame(x + 22, y + 14);
+      drawSesame(x + 60, y + 26);
+      drawSesame(x + 8, y + 28);
+    }
+
+    function drawPatty(x, y) {
+      drawRound(x - 110, y, 220, 36, 18, '#5a3426');
+    }
+
+    function drawCheese(x, y) {
+      ctx.save();
+      ctx.translate(x, y + 10);
+      ctx.rotate(-2 * Math.PI / 180);
+      drawRound(-112, -10, 225, 21, 5, '#e7c94b');
+      ctx.restore();
+    }
+
+    function drawLettuce(x, y) {
+      drawRound(x - 115, y, 230, 27, 12, '#4f9d45');
+    }
+
+    function drawCabbage(x, y) {
+      drawRound(x - 108, y, 216, 24, 10, '#7fbf3f');
+      ctx.strokeStyle = '#a8d96a';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x - 90, y + 12);
+      ctx.lineTo(x + 90, y + 12);
+      ctx.stroke();
+    }
+
+    function drawOnion(x, y) {
+      ctx.fillStyle = '#d8b4f0';
+      ctx.globalAlpha = 0.85;
+      for (let i = -1; i <= 1; i++) {
+        ctx.beginPath();
+        ctx.roundRect(x - 38 + i * 38, y + 6, 76, 12, 8);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    function drawTomato(x, y) {
+      ctx.fillStyle = '#d64545';
+      ctx.beginPath();
+      ctx.ellipse(x - 42, y + 18, 52, 18, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.ellipse(x + 42, y + 18, 52, 18, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawSesame(x, y) {
+      ctx.beginPath();
+      ctx.ellipse(x, y, 6, 3, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawFlagBehindBurger(x, y) {
+      ctx.fillStyle = '#5b3419';
+      ctx.fillRect(x - 3, y - 150, 6, 150);
+
+      ctx.fillStyle = '#d62828';
+      ctx.beginPath();
+      ctx.moveTo(x + 3, y - 150);
+      ctx.lineTo(x + 78, y - 135);
+      ctx.lineTo(x + 3, y - 105);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function startEasterEgg() {
+      easterEgg = true;
+      document.querySelector('.buttons').style.display = 'none';
+      document.body.style.background = '#050505';
+      canvas.style.background = '#111';
+
+      ballX = 70;
+      ballY = 565;
+      ballVX = 0;
+      ballVY = 0;
+      clearMessage();
+
+      if (gameLoop) clearInterval(gameLoop);
+      gameLoop = setInterval(updateEasterEgg, 1000 / 60);
+    }
+
+    function exitEasterEgg() {
+      easterEgg = false;
+      if (gameLoop) clearInterval(gameLoop);
+      gameLoop = null;
+      document.querySelector('.buttons').style.display = 'flex';
+      document.body.style.background = '#fff3d6';
+      canvas.style.background = '#fff3d6';
+    }
+
+    function updateEasterEgg() {
+      if (!easterEgg) return;
+
+      if (keys['ArrowLeft']) ballVX -= 0.38;
+      if (keys['ArrowRight']) ballVX += 0.38;
+
+      ballVY += 0.45;
+      ballX += ballVX;
+      ballY += ballVY;
+      ballVX *= 0.955;
+
+      const platforms = [
+        { x: 25,  y: 610, w: 95, h: 14 },
+        { x: 170, y: 565, w: 62, h: 14 },
+        { x: 315, y: 520, w: 48, h: 14 },
+        { x: 410, y: 470, w: 38, h: 14 },
+        { x: 285, y: 420, w: 48, h: 14 },
+        { x: 145, y: 375, w: 42, h: 14 },
+        { x: 45,  y: 330, w: 38, h: 14 },
+        { x: 155, y: 285, w: 46, h: 14 },
+        { x: 285, y: 245, w: 38, h: 14 },
+        { x: 390, y: 205, w: 34, h: 14 },
+        { x: 250, y: 165, w: 34, h: 14 },
+        { x: 115, y: 128, w: 32, h: 14 },
+        { x: 230, y: 92,  w: 30, h: 14 },
+        { x: 360, y: 58,  w: 26, h: 14 }
+      ];
+
+      for (const p of platforms) {
+        if (
+          ballX > p.x - 22 && ballX < p.x + p.w + 22 &&
+          ballY + 22 > p.y && ballY + 22 < p.y + p.h + 16 &&
+          ballVY >= 0
+        ) {
+          ballY = p.y - 22;
+          ballVY = -8.6;
+        }
+      }
+
+      if (ballX < 22) { ballX = 22; ballVX *= -0.5; }
+      if (ballX > canvas.width - 22) { ballX = canvas.width - 22; ballVX *= -0.5; }
+
+      if (ballY > canvas.height + 60) {
+        resetEasterEggBall();
+      }
+
+      if (ballX > 352 && ballX < 395 && ballY < 48) {
+        onionUnlocked = true;
+        document.getElementById('onionButton').textContent = '양파';
+        document.getElementById('onionButton').style.background = '#d9b3ff';
+        document.getElementById('onionButton').style.color = 'black';
+        exitEasterEgg();
+        drawBurger();
+        showMessage('양파가 해금되었습니다!');
+        return;
+      }
+
+      drawEasterEgg(platforms);
+    }
+
+    function resetEasterEggBall() {
+      ballX = 70;
+      ballY = 565;
+      ballVX = 0;
+      ballVY = 0;
+    }
+
+    function drawEasterEgg(platforms) {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = '#050505';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      for (const star of stars) {
+        ctx.fillRect(star.x, star.y, 2, 2);
+      }
+
+      for (const star of bigStars) {
+        drawStar(star.x, star.y, star.size);
+      }
+
+      ctx.fillStyle = '#ff2b2b';
+      ctx.beginPath();
+      ctx.moveTo(365, 22);
+      ctx.lineTo(435, 40);
+      ctx.lineTo(365, 70);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.fillStyle = '#eeeeee';
+      ctx.fillRect(360, 22, 6, 70);
+
+      for (const p of platforms) {
+        ctx.fillStyle = '#8b8b8b';
+        ctx.beginPath();
+        ctx.roundRect(p.x, p.y, p.w, p.h, 7);
+        ctx.fill();
+
+        ctx.fillStyle = '#d0d0d0';
+        ctx.fillRect(p.x + 3, p.y + 3, p.w - 6, 3);
+      }
+
+      drawBurgerBall(ballX, ballY);
+    }
+
+    function drawStar(x, y, size) {
+      ctx.fillStyle = '#f5e663';
+      ctx.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const angle = Math.PI / 5 * i;
+        const r = i % 2 === 0 ? size : size / 2;
+        const px = x + Math.cos(angle) * r;
+        const py = y + Math.sin(angle) * r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function drawBurgerBall(x, y) {
+      ctx.save();
+      ctx.translate(x, y);
+      ctx.fillStyle = '#d88922';
+      ctx.beginPath();
+      ctx.arc(0, -7, 22, Math.PI, 0);
+      ctx.fill();
+      ctx.fillStyle = '#fff2c7';
+      drawMiniSesame(-8, -20);
+      drawMiniSesame(5, -23);
+      drawMiniSesame(13, -15);
+      ctx.fillStyle = '#4a2315';
+      ctx.beginPath();
+      ctx.roundRect(-22, -4, 44, 9, 4);
+      ctx.fill();
+      ctx.fillStyle = '#e7c94b';
+      ctx.beginPath();
+      ctx.roundRect(-24, 5, 48, 7, 3);
+      ctx.fill();
+      ctx.fillStyle = '#c98a42';
+      ctx.beginPath();
+      ctx.roundRect(-20, 12, 40, 12, 8);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    function drawMiniSesame(x, y) {
+      ctx.beginPath();
+      ctx.ellipse(x, y, 3, 1.5, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    document.addEventListener('keydown', function(e) {
+      keys[e.key] = true;
+    });
+
+    document.addEventListener('keyup', function(e) {
+      keys[e.key] = false;
+    });
+
+    drawBurger();
+  </script>
+</body>
+</html>
