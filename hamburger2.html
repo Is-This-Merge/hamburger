@@ -7,10 +7,13 @@
     body {
       margin: 0;
       height: 100vh;
+      position: relative;
       font-family: sans-serif;
       display: flex;
+      flex-direction: column;
       justify-content: center;
       align-items: center;
+      gap: 20px;
       background: #fff3d6;
     }
 
@@ -64,6 +67,31 @@
       margin-top: 8px;
       color: #333;
     }
+
+    .tomato-letter {
+      position: fixed;
+      z-index: 20;
+      display: none;
+      width: 24px;
+      height: 24px;
+      line-height: 24px;
+      text-align: center;
+      border-radius: 50%;
+      font-size: 15px;
+      font-weight: bold;
+      font-family: Georgia, serif;
+      color: rgba(150, 20, 20, 0.78);
+      background: rgba(255, 245, 210, 0.58);
+      border: 1px solid rgba(150, 60, 20, 0.25);
+      cursor: pointer;
+      user-select: none;
+      transition: transform 0.15s, opacity 0.15s;
+    }
+
+    .tomato-letter:hover {
+      transform: scale(1.16);
+      opacity: 0.9;
+    }
   </style>
 </head>
 <body>
@@ -83,26 +111,74 @@
       <button style="background: green; color: white;" onclick="add('lettuce')">양상추</button>
       <button style="background: #7fbf3f; color: white;" onclick="add('cabbage')">양배추</button>
       <button id="onionButton" style="background: #555; color: white;" onclick="add('onion')">???</button>
-      <button style="background: red; color: white;" onclick="add('tomato')">토마토</button>
+      <button id="tomatoButton" style="background: #555; color: white;" onclick="add('tomato')">???</button>
       <button style="background: #ef233c; color: white;" onclick="toggleFlag()">깃발</button>
       <button style="background: #2563eb; color: white;" onclick="saveBurger()">스크린샷</button>
       <button style="background: #444; color: white;" onclick="clearBurger()">초기화</button>
     </div>
   </div>
 
+  <span id="letter-main" class="tomato-letter" style="top: 18px; right: 26px;">O</span>
+  <span id="letter-vegetarian" class="tomato-letter" style="top: 75%; left: 18%;">T</span>
+  <span id="letter-bread" class="tomato-letter" style="top: 28%; right: 19%;">O</span>
+  <span id="letter-bounce" class="tomato-letter" style="top: 18%; left: 24%;">M</span>
+  <span id="letter-screenshot" class="tomato-letter" style="bottom: 36px; right: 14%;">A</span>
+  <span id="letter-full" class="tomato-letter" style="top: 12%; left: 51%;">T</span>
+
   <script>
     const canvas = document.getElementById('burgerCanvas');
     const ctx = canvas.getContext('2d');
+
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+      CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+        if (w < 0) { x += w; w = -w; }
+        if (h < 0) { y += h; h = -h; }
+        if (typeof r === 'number') {
+          r = { tl: r, tr: r, br: r, bl: r };
+        } else {
+          r = { tl: 0, tr: 0, br: 0, bl: 0, ...r };
+        }
+        const maxR = Math.min(w, h) / 2;
+        r.tl = Math.min(r.tl, maxR);
+        r.tr = Math.min(r.tr, maxR);
+        r.br = Math.min(r.br, maxR);
+        r.bl = Math.min(r.bl, maxR);
+
+        this.beginPath();
+        this.moveTo(x + r.tl, y);
+        this.lineTo(x + w - r.tr, y);
+        this.quadraticCurveTo(x + w, y, x + w, y + r.tr);
+        this.lineTo(x + w, y + h - r.br);
+        this.quadraticCurveTo(x + w, y + h, x + w - r.br, y + h);
+        this.lineTo(x + r.bl, y + h);
+        this.quadraticCurveTo(x, y + h, x, y + h - r.bl);
+        this.lineTo(x, y + r.tl);
+        this.quadraticCurveTo(x, y, x + r.tl, y);
+        this.closePath();
+        return this;
+      };
+    }
 
     let burgerList = [];
     let hasFlag = false;
     let onionUnlocked = false;
     let cheeseUnlocked = false;
+    let tomatoUnlocked = false;
     let screenshotClickCount = 0;
     let fallingItem = null;
     let isFalling = false;
     let vegetarianUnlocked = false;
     let breadGirlUnlocked = false;
+
+    const tomatoLetterIds = [
+      'letter-main',
+      'letter-vegetarian',
+      'letter-bread',
+      'letter-bounce',
+      'letter-screenshot',
+      'letter-full'
+    ];
+    const collectedTomatoLetters = new Set();
 
     let easterEgg = false;
     let gameLoop = null;
@@ -130,12 +206,21 @@
 
       if (type === 'cheese' && !cheeseUnlocked) return;
 
+      if (type === 'tomato' && !tomatoUnlocked) return;
+
       if (hasFlag) {
         showMessage('깃발을 꽂은 뒤에는 재료를 추가할 수 없습니다.');
         return;
       }
 
       if (isFalling) return;
+
+      if (getTargetY(type) < 30) {
+        revealTomatoLetter('letter-full');
+        showMessage('더 이상 쌓을 수 없습니다.');
+        return;
+      }
+
       startFalling(type);
       clearMessage();
     }
@@ -170,6 +255,7 @@
 
       if (onlyBread && breadCount >= 4 && hasFlag && isCompleteBurger()) {
         breadGirlUnlocked = true;
+        revealTomatoLetter('letter-bread');
         showMessage('빵순이');
       }
     }
@@ -179,30 +265,15 @@
 
       const hasPatty = burgerList.includes('patty');
 
-      if (!hasPatty && hasFlag && isCompleteBurger() && !breadGirlUnlocked) {
+      if (!hasPatty && hasFlag && isCompleteBurger()) {
         vegetarianUnlocked = true;
-        showMessage('채식주의자');
+        revealTomatoLetter('letter-vegetarian');
 
-        ctx.save();
-        ctx.fillStyle = 'rgba(80, 180, 80, 0.18)';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        for (let i = 0; i < 18; i++) {
-          ctx.fillStyle = '#4caf50';
-          ctx.beginPath();
-          ctx.ellipse(
-            Math.random() * canvas.width,
-            Math.random() * canvas.height,
-            12,
-            6,
-            Math.random() * Math.PI,
-            0,
-            Math.PI * 2
-          );
-          ctx.fill();
+        if (breadGirlUnlocked) {
+          showMessage('빵순이 / 채식주의자');
+        } else {
+          showMessage('채식주의자');
         }
-
-        ctx.restore();
       }
     }
 
@@ -257,6 +328,7 @@
       link.download = name + '.png';
       link.href = canvas.toDataURL('image/png');
       link.click();
+      revealTomatoLetter('letter-screenshot');
     }
 
     function startFalling(type) {
@@ -357,6 +429,7 @@
       if (fallingItem) {
         drawSingleIngredient(fallingItem.type, x, fallingItem.y);
       }
+
     }
 
     function redrawIngredientsOnly(x, startY) {
@@ -512,6 +585,7 @@
       ballVX = 0;
       ballVY = 0;
       clearMessage();
+      revealTomatoLetter('letter-bounce');
 
       if (gameLoop) clearInterval(gameLoop);
       gameLoop = setInterval(updateEasterEgg, 1000 / 60);
@@ -677,6 +751,43 @@
       ctx.ellipse(x, y, 3, 1.5, 0, 0, Math.PI * 2);
       ctx.fill();
     }
+
+    function revealTomatoLetter(id) {
+      const el = document.getElementById(id);
+      if (!el || collectedTomatoLetters.has(id)) return;
+      el.style.display = 'block';
+    }
+
+    function collectTomatoLetter(id) {
+      const el = document.getElementById(id);
+      if (!el || collectedTomatoLetters.has(id)) return;
+      collectedTomatoLetters.add(id);
+      el.style.display = 'none';
+      checkTomatoUnlock();
+    }
+
+    function checkTomatoUnlock() {
+      if (tomatoUnlocked) return;
+      if (collectedTomatoLetters.size !== tomatoLetterIds.length) return;
+
+      tomatoUnlocked = true;
+      const tomatoButton = document.getElementById('tomatoButton');
+      tomatoButton.textContent = '토마토';
+      tomatoButton.style.background = 'red';
+      tomatoButton.style.color = 'white';
+      showMessage('토마토가 해금되었습니다!');
+    }
+
+    for (const id of tomatoLetterIds) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.addEventListener('click', function() {
+          collectTomatoLetter(id);
+        });
+      }
+    }
+
+    revealTomatoLetter('letter-main');
 
     document.addEventListener('keydown', function(e) {
       keys[e.key] = true;
