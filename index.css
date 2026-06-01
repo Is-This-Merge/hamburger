@@ -1,3 +1,11 @@
+h1 {
+    text-align: center;
+}
 html {
+    align-items: center;
     font-family: 'Pretendard';
+    background-color: antiquewhite;
+}
+p {
+    text-align: center;
 }
